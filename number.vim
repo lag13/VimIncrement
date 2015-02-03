@@ -34,23 +34,20 @@
 
 " On a range of lines, appends an increasing number to an occurrence of
 " 'pattern' on the line.
+
+
+" The old NumberCore() function was a bit too complicated for my taste. So I
+" made this next iteration much simpler.  All it does is replaces 'pattern'
+" with an increasing number. You can still get the same effect as the old
+" function (i.e appending an increasing number to a 'pattern') through
+" appropriate use of the \zs and \ze atoms
 function! NumberCore(pattern, prepend_str, append_str, start_increment) range
     let increment = a:start_increment
-    for i in range(a:firstline, a:lastline)
-        call cursor(i, 1)
-        let cur_line = getline('.')
-        let pat_end_index = matchend(cur_line, a:pattern)
-        if pat_end_index !=# -1
-            let new_line1 = strpart(cur_line, 0, pat_end_index)
-            " We append the incrementing number to the first match of
-            " 'pattern' we see regardless of whether 'pattern' is followed by
-            " any digits.
-            if match(cur_line, a:pattern) ==# match(cur_line, a:pattern . '\d\+')
-                let new_line2 = strpart(cur_line, matchend(cur_line, a:pattern . '\d\+'), len(cur_line))
-            else
-                let new_line2 = strpart(cur_line, pat_end_index, len(cur_line))
-            endif
-            call setline('.', new_line1 . a:prepend_str . increment . a:append_str . new_line2)
+    for line_no in range(a:firstline, a:lastline)
+        let cur_line = getline(line_no)
+        if match(cur_line, a:pattern) !=# -1
+            let new_line = substitute(cur_line, a:pattern, a:prepend_str . increment . a:append_str, '')
+            call setline(line_no, new_line)
             let increment += 1
         endif
     endfor
@@ -74,7 +71,7 @@ function! NumberWrapper() range
     if match(first_line, pattern) ==# 0
         let pattern = '^' . pattern
     endif
-    '<,'>call NumberCore(pattern, '', '', 1)
+    '<,'>call NumberCore2(pattern)
 endfunction
 
 " Suggestd mappings:
