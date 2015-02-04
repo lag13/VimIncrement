@@ -36,11 +36,11 @@
 " 'pattern' on the line.
 
 
-" The old NumberCore() function was a bit too complicated for my taste. So I
-" made this next iteration much simpler.  All it does is replaces 'pattern'
-" with an increasing number. You can still get the same effect as the old
-" function (i.e appending an increasing number to a 'pattern') through
-" appropriate use of the \zs and \ze atoms
+" The old NumberCore() function was a bit too complicated for my taste so I
+" made this next iteration simpler.  All it does is replaces 'pattern' with an
+" increasing number. You can still get the same effect as the old function
+" (i.e appending an increasing number to a 'pattern') through appropriate use
+" of the \zs and \ze atoms
 function! NumberCore(pattern, prepend_str, append_str, start_increment) range
     let increment = a:start_increment
     for line_no in range(a:firstline, a:lastline)
@@ -52,6 +52,47 @@ function! NumberCore(pattern, prepend_str, append_str, start_increment) range
         endif
     endfor
 endfunction
+
+" Finds all the strings on each line that match a regex and returns the string
+" that occurrs the most number of times.
+" let regex = "\\v[^0-9 \t]*\\ze\\d+" 
+function! GetMostFrequentPattern(line_nums, regex)
+    " Count up how many times each pattern occurrs
+    let pattern_dict = {}
+    for line_no in a:line_nums
+        let pattern = substitute(matchstr(getline(line_no), a:regex), '\s*', '', '')
+        if pattern !=# ''
+            if has_key(pattern_dict, pattern)
+                let pattern_dict[pattern] += 1
+            else
+                let pattern_dict[pattern] = 1
+            endif
+        endif
+    endfor
+    return pattern_dict
+endfunction
+
+" Tries to find a pattern that ends in a number. That is the pattern that will
+" be incremented.
+function! FindPattern(startline, endline)
+    " Pick 5 random lines to look through to find a common pattern
+    let num_lines_to_look_through = 5
+    if a:endline - a:startline + 1 <# num_lines_to_look_through
+        let num_lines_to_look_through = a:endline - a:startline + 1
+    endif
+    " Return the pattern that occurrs most often
+    let pattern_dict = GetMostFrequentPattern(range(a:startline, a:startline + num_lines_to_look_through), "\\v[^0-9 \t]*\\ze\\d+")
+    let result = ''
+    let max_val = max(pattern_dict)
+    for [key, value] in items(pattern_dict)
+        if value ==# max_val
+            let result = key
+            break
+        endif
+    endfor
+    return result
+endfunction
+
 
 " I like the idea of having all those parameters to the 'NumberCore()' function
 " because it offers more control, but most of the time you won't need them. So
