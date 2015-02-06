@@ -53,14 +53,13 @@ function! NumberCore(pattern, prepend_str, append_str, start_increment) range
     endfor
 endfunction
 
-" Finds all the strings on each line that match a regex and returns the string
-" that occurrs the most number of times.
-" let regex = "\\v[^0-9 \t]*\\ze\\d+" 
-function! GetMostFrequentPattern(line_nums, regex)
-    " Count up how many times each pattern occurrs
+" Given a list of strings and a regex, returns the regex that appears most
+" often. 
+function! GetMostFrequentPattern(string_list, regex)
+    " Count the number of times each pattern occurrs
     let pattern_dict = {}
-    for line_no in a:line_nums
-        let pattern = substitute(matchstr(getline(line_no), a:regex), '\s*', '', '')
+    for string in a:string_list
+        let pattern = matchstr(string, a:regex)
         if pattern !=# ''
             if has_key(pattern_dict, pattern)
                 let pattern_dict[pattern] += 1
@@ -69,19 +68,7 @@ function! GetMostFrequentPattern(line_nums, regex)
             endif
         endif
     endfor
-    return pattern_dict
-endfunction
-
-" Tries to find a pattern that ends in a number. That is the pattern that will
-" be incremented.
-function! FindPattern(startline, endline)
-    " Pick 5 random lines to look through to find a common pattern
-    let num_lines_to_look_through = 5
-    if a:endline - a:startline + 1 <# num_lines_to_look_through
-        let num_lines_to_look_through = a:endline - a:startline + 1
-    endif
-    " Return the pattern that occurrs most often
-    let pattern_dict = GetMostFrequentPattern(range(a:startline, a:startline + num_lines_to_look_through), "\\v[^0-9 \t]*\\ze\\d+")
+    " Return the pattern that occurred the most
     let result = ''
     let max_val = max(pattern_dict)
     for [key, value] in items(pattern_dict)
@@ -93,26 +80,27 @@ function! FindPattern(startline, endline)
     return result
 endfunction
 
+" Tries to find a pattern that ends in a number
+function! FindPattern(startline, endline)
+    " Pick 5 random lines to look through to find a common pattern
+    let last_line_to_check = a:startline + 5
+    if last_line_to_check > a:endline
+        let last_line_to_check = a:endline
+    endif
+    " Return the pattern that occurrs most often
+    let string_list = map(range(a:startline, last_line_to_check), 'substitute(getline(v:val), "\\s*", "", "")')
+    return GetMostFrequentPattern(string_list, "\\v[^0-9 \t]*\\ze\\d+")
+endfunction
 
 " I like the idea of having all those parameters to the 'NumberCore()' function
 " because it offers more control, but most of the time you won't need them. So
 " this calls that function in a 'reasonable' way.
-function! Number(pattern) range
-    '<,'>call NumberCore(a:pattern, '', '', 1)
-endfunction
-
-" Most of the time you'll probably just want to increment the first set of
-" numbers you see. This function allows you to do that. It will get the first
-" sequence of non-whitespace characters which are followed by a sequence of
-" digits. It takes the non-whitespace characters to be the 'pattern' which
-" gets passed to the 'NumberCore()' function.
-function! NumberWrapper() range
-    let first_line = getline(a:firstline)
-    let pattern = matchstr(first_line, '\S*\ze\d\+')
-    if match(first_line, pattern) ==# 0
-        let pattern = '^' . pattern
+function! Number() range
+    let pattern = FindPattern(a:firstline, a:lastline)
+    if pattern !=# ''
+        let pattern = pattern . '\zs\d\+'
+        '<,'>call NumberCore(pattern, '', '', 1)
     endif
-    '<,'>call NumberCore2(pattern)
 endfunction
 
 " Suggestd mappings:
