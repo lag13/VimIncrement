@@ -10,13 +10,13 @@
 " fairly annoying to re-number all the 'Task's. But with this plugin it would
 " be simple. Just visually select the text to reorder and run the command:
 
-"                :call NumberWrapper()
+"                :call Number()
 
 " You can get more specific about which patterns you'd like to adjust. Say
 " that the 'task's at the end got out of order. You could visually select the
 " list and run:
 
-"                :call Number('task')
+"                :call NumberPat('task')
 
 " And you can get even more specific if desired. You have the ability to say where
 " the number starts incrementing from and you can prepend or append strings to
@@ -41,9 +41,9 @@
 " increasing number. You can still get the same effect as the old function
 " (i.e appending an increasing number to a 'pattern') through appropriate use
 " of the \zs and \ze atoms
-function! NumberCore(pattern, prepend_str, append_str, start_increment) range
+function! NumberCore(startline, endline, pattern, start_increment, prepend_str, append_str) range
     let increment = a:start_increment
-    for line_no in range(a:firstline, a:lastline)
+    for line_no in range(a:startline, a:endline)
         let cur_line = getline(line_no)
         if match(cur_line, a:pattern) !=# -1
             let new_line = substitute(cur_line, a:pattern, a:prepend_str . increment . a:append_str, '')
@@ -53,54 +53,70 @@ function! NumberCore(pattern, prepend_str, append_str, start_increment) range
     endfor
 endfunction
 
-" Given a list of strings and a regex, returns the regex that appears most
-" often. 
+" Given a list of strings and a regex, returns the string generated from the
+" regex that appeared most often. 
 function! GetMostFrequentPattern(string_list, regex)
     " Count the number of times each pattern occurrs
     let pattern_dict = {}
+    let max_num_occurrences = 0
+    let num_occurrences_empty = 0
+    let result = ''
     for string in a:string_list
         let pattern = matchstr(string, a:regex)
+        " We cannot use an empty key for a dictionary. HOWEVER I think
+        " returning an empty match is okay so I'll keep track of the number of
+        " empty matches in a separate variable.
         if pattern !=# ''
             if has_key(pattern_dict, pattern)
                 let pattern_dict[pattern] += 1
             else
                 let pattern_dict[pattern] = 1
             endif
+            " Update the pattern that occurred most often
+            if pattern_dict[pattern] > max_num_occurrences
+                let max_num_occurrences = pattern_dict[pattern]
+                let result = pattern
+            endif
+        else
+            let num_occurrences_empty += 1
         endif
     endfor
-    " Return the pattern that occurred the most
-    let result = ''
-    let max_val = max(pattern_dict)
-    for [key, value] in items(pattern_dict)
-        if value ==# max_val
-            let result = key
-            break
-        endif
-    endfor
+    if num_occurrences_empty > max_num_occurrences
+        let result = ''
+    endif
     return result
 endfunction
 
-" Tries to find a pattern that ends in a number
-function! FindPattern(startline, endline)
-    " Pick 5 random lines to look through to find a common pattern
+" Returns a regex of the pattern that occurred most often between a:startline
+" and a:endline. This regex will be prepended with '^\s*' and appended with
+" '\zs\d\+'.
+function! FindRegexEndingInNumber(startline, endline)
+    " Try looking through the first 5 lines to find a common pattern
     let last_line_to_check = a:startline + 5
     if last_line_to_check > a:endline
         let last_line_to_check = a:endline
     endif
     " Return the pattern that occurrs most often
-    let string_list = map(range(a:startline, last_line_to_check), 'substitute(getline(v:val), "\\s*", "", "")')
-    return GetMostFrequentPattern(string_list, "\\v[^0-9 \t]*\\ze\\d+")
+    let string_list = map(range(a:startline, last_line_to_check), 'getline(v:val)')
+    let result = GetMostFrequentPattern(string_list, '\v^[^0-9]*\ze\d+')
+    " We want to ignore any leading whitespace. I also turn on the 'very
+    " nomagic' switch so any special characters in 'result' will not affect
+    " the returned regex.
+    let result = '\V\^\s\*' . substitute(result, '^\s*', '', '') . '\zs\d\+'
+    return result
 endfunction
 
 " I like the idea of having all those parameters to the 'NumberCore()' function
 " because it offers more control, but most of the time you won't need them. So
 " this calls that function in a 'reasonable' way.
 function! Number() range
-    let pattern = FindPattern(a:firstline, a:lastline)
-    if pattern !=# ''
-        let pattern = pattern . '\zs\d\+'
-        '<,'>call NumberCore(pattern, '', '', 1)
-    endif
+    let pattern = FindRegexEndingInNumber(a:firstline, a:lastline)
+    call NumberCore(a:firstline, a:lastline, pattern, 1, '', '')
+endfunction
+
+" Will append an incrementing number to a specified pattern.
+function! NumberPat(pattern) range
+    echo 'test'
 endfunction
 
 " Suggestd mappings:
