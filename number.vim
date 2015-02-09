@@ -35,6 +35,30 @@
 " On a range of lines, appends an increasing number to an occurrence of
 " 'pattern' on the line.
 
+" TODO: 
+" 1. Try to make any non-whitespace characters AFTER the number part of the
+" pattern as well.  I say this because my current implementation would fail if
+" we had a numbered list and the second line of one of the lists began with a
+" number i.e if it looked like this: 
+"                   1. This is a really long list item
+"                      3 things I want to do are...
+"                   2. Some mor stuff
+" My implementation would change the '3' in front of the word 'things' which
+" is no good. This will involve changing the regex that the
+" FindRegexEndingInNumber() passes to the GetMostFrequentPattern() function.
+" 2. Consider making the NumberCore() function accept a list of strings which
+" will replace the pattern rather than having an increasing number. This would
+" make it more general which I like.
+" 3. Consider making the NumberCore() function more functional, in other words
+" it would accept a list of strings and return a list of strings rather than
+" actually changing lines.
+" 4. This very TODO list will NOT get properly numbered because there are too
+" many patterns that come up empty and so those rule out any other patterns we
+" see.  Improve the GetMostFrequentPattern() function to prevent this. I think
+" the best way to fix it is twofold. First we'll remove it's ability to return
+" an empty match and secondly we'll make it so that it turns any sequence of
+" numbers it sees into '\d\+'.
+
 
 " The old NumberCore() function was a bit too complicated for my taste so I
 " made this next iteration simpler.  All it does is replaces 'pattern' with an
@@ -72,7 +96,6 @@ function! GetMostFrequentPattern(string_list, regex)
             else
                 let pattern_dict[pattern] = 1
             endif
-            " Update the pattern that occurred most often
             if pattern_dict[pattern] > max_num_occurrences
                 let max_num_occurrences = pattern_dict[pattern]
                 let result = pattern
@@ -88,27 +111,21 @@ function! GetMostFrequentPattern(string_list, regex)
 endfunction
 
 " Returns a regex of the pattern that occurred most often between a:startline
-" and a:endline. This regex will be prepended with '^\s*' and appended with
-" '\zs\d\+'.
+" and a:endline. This regex will be prepended with '^\s*' (so indenting won't
+" matter) and appended with '\zs\d\+' (which allows us to increment the number
+" following the pattern).
 function! FindRegexEndingInNumber(startline, endline)
-    " Try looking through the first 5 lines to find a common pattern
-    let last_line_to_check = a:startline + 5
-    if last_line_to_check > a:endline
-        let last_line_to_check = a:endline
-    endif
     " Return the pattern that occurrs most often
-    let string_list = map(range(a:startline, last_line_to_check), 'getline(v:val)')
+    let string_list = map(range(a:startline, a:endline), 'getline(v:val)')
     let result = GetMostFrequentPattern(string_list, '\v^[^0-9]*\ze\d+')
-    " We want to ignore any leading whitespace. I also turn on the 'very
-    " nomagic' switch so any special characters in 'result' will not affect
-    " the returned regex.
+    " I turn on the 'very nomagic' switch so any special characters in
+    " 'result' will not affect the returned regex.
     let result = '\V\^\s\*' . substitute(result, '^\s*', '', '') . '\zs\d\+'
     return result
 endfunction
 
-" I like the idea of having all those parameters to the 'NumberCore()' function
-" because it offers more control, but most of the time you won't need them. So
-" this calls that function in a 'reasonable' way.
+" A wrapper to the 'NumberCore()' function that does things in a 'reasonable'
+" way.
 function! Number() range
     let pattern = FindRegexEndingInNumber(a:firstline, a:lastline)
     call NumberCore(a:firstline, a:lastline, pattern, 1, '', '')
@@ -116,7 +133,7 @@ endfunction
 
 " Will append an incrementing number to a specified pattern.
 function! NumberPat(pattern) range
-    echo 'test'
+    call NumberCore(a:firstline, a:lastline, a:pattern, 1, '', '')
 endfunction
 
 " Suggestd mappings:
