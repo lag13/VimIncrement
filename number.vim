@@ -42,22 +42,26 @@
 " number i.e if it looked like this: 
 "                   1. This is a really long list item
 "                      3 things I want to do are...
-"                   2. Some mor stuff
+"                   4. Some mor stuff
 " My implementation would change the '3' in front of the word 'things' which
 " is no good. This will involve changing the regex that the
 " FindRegexEndingInNumber() passes to the GetMostFrequentPattern() function.
-" 2. Consider making the NumberCore() function accept a list of strings which
-" will replace the pattern rather than having an increasing number. This would
-" make it more general which I like.
-" 3. Consider making the NumberCore() function more functional, in other words
-" it would accept a list of strings and return a list of strings rather than
-" actually changing lines.
-" 4. This very TODO list will NOT get properly numbered because there are too
+" 2. This very TODO list will NOT get properly numbered because there are too
 " many patterns that come up empty and so those rule out any other patterns we
-" see.  Improve the GetMostFrequentPattern() function to prevent this. I think
-" the best way to fix it is twofold. First we'll remove it's ability to return
-" an empty match and secondly we'll make it so that it turns any sequence of
-" numbers it sees into '\d\+'.
+" see.  Improve the GetMostFrequentPattern() function to prevent this. I've
+" already removed it's ability to keep count of empty patterns. This has had
+" more positive results than I originally intended! For example, this list IS
+" now being properly numbered. There are still improvements to be made though.
+" For example if I have a list like this:
+"               // 1. This is the first number
+"               //4. This is the second number
+"               //  4. This is the second number
+" Then this won't be properly numbered because the spacing doesn't match.
+" Maybe detetcting this is a little nitpicky but it's something to keep in
+" mind I suppose.
+" 3. Improve this so that if a pattern DOES match at the begginning of the
+" line, then FindRegexEndingInNumber() will NOT prepend '^\s\*' to the
+" returned regex, it will JUST prepend '^'.
 
 
 " The old NumberCore() function was a bit too complicated for my taste so I
@@ -65,16 +69,17 @@
 " increasing number. You can still get the same effect as the old function
 " (i.e appending an increasing number to a 'pattern') through appropriate use
 " of the \zs and \ze atoms
-function! NumberCore(startline, endline, pattern, start_increment, prepend_str, append_str) range
-    let increment = a:start_increment
-    for line_no in range(a:startline, a:endline)
-        let cur_line = getline(line_no)
-        if match(cur_line, a:pattern) !=# -1
-            let new_line = substitute(cur_line, a:pattern, a:prepend_str . increment . a:append_str, '')
-            call setline(line_no, new_line)
-            let increment += 1
+function! NumberCore(strings, pattern, sub_strings)
+    let result = []
+    let i = 0
+    for str in a:strings
+        if match(str, a:pattern) !=# -1
+            let str = substitute(str, a:pattern, a:sub_strings[i], '')
+            let i += 1
         endif
+        call add(result, str)
     endfor
+    return result
 endfunction
 
 " Given a list of strings and a regex, returns the string generated from the
@@ -83,13 +88,9 @@ function! GetMostFrequentPattern(string_list, regex)
     " Count the number of times each pattern occurrs
     let pattern_dict = {}
     let max_num_occurrences = 0
-    let num_occurrences_empty = 0
     let result = ''
     for string in a:string_list
         let pattern = matchstr(string, a:regex)
-        " We cannot use an empty key for a dictionary. HOWEVER I think
-        " returning an empty match is okay so I'll keep track of the number of
-        " empty matches in a separate variable.
         if pattern !=# ''
             if has_key(pattern_dict, pattern)
                 let pattern_dict[pattern] += 1
@@ -100,13 +101,30 @@ function! GetMostFrequentPattern(string_list, regex)
                 let max_num_occurrences = pattern_dict[pattern]
                 let result = pattern
             endif
-        else
-            let num_occurrences_empty += 1
         endif
     endfor
-    if num_occurrences_empty > max_num_occurrences
-        let result = ''
-    endif
+    return result
+endfunction
+
+" Returns the most frequent non-empty string in a list of strings. If the list
+" only contains non-empty strings, then the empty string will be returned.
+function! GetMostCommonNonEmptyStr(strings)
+    let dict = {}
+    let num_occurrences = 0
+    let result = ''
+    for str in a:strings
+        if str !=# ''
+            if has_key(dict, str)
+                let dict[str] += 1
+            else
+                let dict[str] = 1
+            endif
+            if dict[str] > num_occurrences
+                let num_occurrences = dict[str]
+                let result = str
+            endif
+        endif
+    endfor
     return result
 endfunction
 
@@ -117,23 +135,45 @@ endfunction
 function! FindRegexEndingInNumber(startline, endline)
     " Return the pattern that occurrs most often
     let string_list = map(range(a:startline, a:endline), 'getline(v:val)')
-    let result = GetMostFrequentPattern(string_list, '\v^[^0-9]*\ze\d+')
+    "let result = GetMostFrequentPattern(string_list, '\v^[^0-9]*\ze\d+')
+    let regex = '\v^[^0-9]*\d+'
+    " Get's a list of all strings resulting from the regex then turns any
+    " numbers in those resulting strings into the string '\zs\d\+'
+    call map(string_list, 'substitute(matchstr(v:val, regex), "\\d\\+", "\\\\zs\\\\d\\\\+", "")')
     " I turn on the 'very nomagic' switch so any special characters in
     " 'result' will not affect the returned regex.
-    let result = '\V\^\s\*' . substitute(result, '^\s*', '', '') . '\zs\d\+'
+    " TODO: Probably need to escape any backslashes that might be in the
+    " string.
+    let result = '\V\^\s\*' . substitute(GetMostCommonNonEmptyStr(string_list), '^\s*', '', '')
     return result
 endfunction
 
-" A wrapper to the 'NumberCore()' function that does things in a 'reasonable'
-" way.
-function! Number() range
-    let pattern = FindRegexEndingInNumber(a:firstline, a:lastline)
-    call NumberCore(a:firstline, a:lastline, pattern, 1, '', '')
+" Changes the buffer.
+function! NumberLines(startline, endline, pattern)
+    let new_lines = NumberCore(map(range(a:startline, a:endline), 'getline(v:val)'), a:pattern, range(1, a:endline - a:startline + 1))
+    for i in range(a:startline, a:endline)
+        call setline(i, new_lines[i-a:startline])
+    endfor
 endfunction
 
-" Will append an incrementing number to a specified pattern.
-function! NumberPat(pattern) range
-    call NumberCore(a:firstline, a:lastline, a:pattern, 1, '', '')
+" A wrapper to the 'NumberCore()' function wich requires the least amount of
+" thinking and will do exactly what you want 95% of the time.
+function! Number() range
+    let pattern = FindRegexEndingInNumber(a:firstline, a:lastline)
+    call NumberLines(a:firstline, a:lastline, pattern)
+endfunction
+
+" The next level up in specificity. Allows you to specify a plain old string
+" which will have an increasing number appended to it.
+function! NumberStr(string) range
+    let regex = '\V' . escape(a:string, '\') . '\zs\(\d\+\)\?'
+    call NumberLines(a:firstline, a:lastline, regex)
+endfunction
+
+" The highest level of specificity. Give the actual regex which will be
+" replaced with an increasing number.
+function! NumberReg(regex) range
+    call NumberLines(a:firstline, a:lastline, a:regex)
 endfunction
 
 " Suggestd mappings:
