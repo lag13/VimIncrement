@@ -1,5 +1,5 @@
-" Appends an increasing number to a pattern wherever that pattern apears on a
-" range of lines. For example, say you had a list like this:
+" Appends an increasing number to a pattern on a range of lines. For example,
+" say you had a list like this:
 
 " Task1 Some stuff about task1
 " Task2 Some stuff about task2
@@ -16,53 +16,9 @@
 " that the 'task's at the end got out of order. You could visually select the
 " list and run:
 
-"                :call NumberPat('task')
-
-" And you can get even more specific if desired. You have the ability to say where
-" the number starts incrementing from and you can prepend or append strings to
-" that number. For example, say you wanted to make the above list have each
-" line look something like this:
-"               Task (1): Some stuff about task 1
-" instead of this:
-"               Task1 Some stuff about task 1
-
-" You could visually select the text and run this command:
-
-"                :call NumberCore('Task', ' (', '):', 1)
+"                :call NumberStr('task')
 
 " Author; Lucas Groenendaal
-
-" On a range of lines, appends an increasing number to an occurrence of
-" 'pattern' on the line.
-
-" TODO: 
-" 1. Try to make any non-whitespace characters AFTER the number part of the
-" pattern as well.  I say this because my current implementation would fail if
-" we had a numbered list and the second line of one of the lists began with a
-" number i.e if it looked like this: 
-"                   1. This is a really long list item
-"                      3 things I want to do are...
-"                   4. Some mor stuff
-" My implementation would change the '3' in front of the word 'things' which
-" is no good. This will involve changing the regex that the
-" FindRegexEndingInNumber() passes to the GetMostFrequentPattern() function.
-" 2. This very TODO list will NOT get properly numbered because there are too
-" many patterns that come up empty and so those rule out any other patterns we
-" see.  Improve the GetMostFrequentPattern() function to prevent this. I've
-" already removed it's ability to keep count of empty patterns. This has had
-" more positive results than I originally intended! For example, this list IS
-" now being properly numbered. There are still improvements to be made though.
-" For example if I have a list like this:
-"               // 1. This is the first number
-"               //4. This is the second number
-"               //  4. This is the second number
-" Then this won't be properly numbered because the spacing doesn't match.
-" Maybe detetcting this is a little nitpicky but it's something to keep in
-" mind I suppose.
-" 3. Improve this so that if a pattern DOES match at the begginning of the
-" line, then FindRegexEndingInNumber() will NOT prepend '^\s\*' to the
-" returned regex, it will JUST prepend '^'.
-
 
 " The old NumberCore() function was a bit too complicated for my taste so I
 " made this next iteration simpler.  All it does is replaces 'pattern' with an
@@ -82,32 +38,10 @@ function! NumberCore(strings, pattern, sub_strings)
     return result
 endfunction
 
-" Given a list of strings and a regex, returns the string generated from the
-" regex that appeared most often. 
-function! GetMostFrequentPattern(string_list, regex)
-    " Count the number of times each pattern occurrs
-    let pattern_dict = {}
-    let max_num_occurrences = 0
-    let result = ''
-    for string in a:string_list
-        let pattern = matchstr(string, a:regex)
-        if pattern !=# ''
-            if has_key(pattern_dict, pattern)
-                let pattern_dict[pattern] += 1
-            else
-                let pattern_dict[pattern] = 1
-            endif
-            if pattern_dict[pattern] > max_num_occurrences
-                let max_num_occurrences = pattern_dict[pattern]
-                let result = pattern
-            endif
-        endif
-    endfor
-    return result
-endfunction
-
 " Returns the most frequent non-empty string in a list of strings. If the list
-" only contains non-empty strings, then the empty string will be returned.
+" only contains non-empty strings, then the empty string will be returned. If
+" multiple strings occurr with the same frequency, the first one found will be
+" returned.
 function! GetMostCommonNonEmptyStr(strings)
     let dict = {}
     let num_occurrences = 0
@@ -128,55 +62,50 @@ function! GetMostCommonNonEmptyStr(strings)
     return result
 endfunction
 
-" Returns a regex of the pattern that occurred most often between a:startline
-" and a:endline. This regex will be prepended with '^\s*' (so indenting won't
-" matter) and appended with '\zs\d\+' (which allows us to increment the number
-" following the pattern).
-function! FindRegexEndingInNumber(startline, endline)
-    " Return the pattern that occurrs most often
-    let string_list = map(range(a:startline, a:endline), 'getline(v:val)')
-    "let result = GetMostFrequentPattern(string_list, '\v^[^0-9]*\ze\d+')
-    let regex = '\v^[^0-9]*\d+'
-    " Get's a list of all strings resulting from the regex then turns any
-    " numbers in those resulting strings into the string '\zs\d\+'
-    call map(string_list, 'substitute(matchstr(v:val, regex), "\\d\\+", "\\\\zs\\\\d\\\\+", "")')
-    " I turn on the 'very nomagic' switch so any special characters in
-    " 'result' will not affect the returned regex.
-    " TODO: Probably need to escape any backslashes that might be in the
-    " string.
-    let result = '\V\^\s\*' . substitute(GetMostCommonNonEmptyStr(string_list), '^\s*', '', '')
-    return result
+" Turns a list of strings into another list of strings X using a regex. Then
+" returns the string that occurred most often in X with a little extra
+" regex-ness tacked on. The whole point is to automatically find a pattern
+" that, when used with the NumberCore() function, will correctly number a
+" series of lines.
+function! FindRegexEndingInNumber(string_list)
+    let regex = '\v^[^0-9]*\d+\S*'
+    " Those 4 backslashes in a row look pretty bad but they're necessary.
+    call map(a:string_list, 'substitute(escape(matchstr(v:val, regex), "\\"), "\\d\\+", "\\\\zs\\\\d\\\\+\\\\ze", "")')
+    " I turn on the 'very nomagic' switch so all characters returned from
+    " GetMostCommonNonEmptyStr() will be treated literally.
+    " TODO: Don't use the \s\* when the pattern ACTUALLY matched at the beginning of the line.
+    return '\V\^\s\*' . substitute(GetMostCommonNonEmptyStr(a:string_list), '^\s*', '', '')
 endfunction
 
 " Changes the buffer.
-function! NumberLines(startline, endline, pattern)
+function! ChangeLines(startline, endline, pattern)
     let new_lines = NumberCore(map(range(a:startline, a:endline), 'getline(v:val)'), a:pattern, range(1, a:endline - a:startline + 1))
     for i in range(a:startline, a:endline)
         call setline(i, new_lines[i-a:startline])
     endfor
 endfunction
 
+
+" These three functions are the things which should be mapped.
+
 " A wrapper to the 'NumberCore()' function wich requires the least amount of
 " thinking and will do exactly what you want 95% of the time.
 function! Number() range
-    let pattern = FindRegexEndingInNumber(a:firstline, a:lastline)
-    call NumberLines(a:firstline, a:lastline, pattern)
+    let lines = map(range(a:firstline, a:lastline), 'getline(v:val)')
+    let pattern = FindRegexEndingInNumber(lines)
+    call ChangeLines(a:firstline, a:lastline, pattern)
 endfunction
 
 " The next level up in specificity. Allows you to specify a plain old string
-" which will have an increasing number appended to it.
+" which will have an increasing number appended to it whether or not the string
+" ends in a number.
 function! NumberStr(string) range
     let regex = '\V' . escape(a:string, '\') . '\zs\(\d\+\)\?'
-    call NumberLines(a:firstline, a:lastline, regex)
+    call ChangeLines(a:firstline, a:lastline, regex)
 endfunction
 
 " The highest level of specificity. Give the actual regex which will be
 " replaced with an increasing number.
 function! NumberReg(regex) range
-    call NumberLines(a:firstline, a:lastline, a:regex)
+    call ChangeLines(a:firstline, a:lastline, a:regex)
 endfunction
-
-" Suggestd mappings:
-" vnoremap <silent> <leader>o :call NumberWrapper()<CR>
-" vnoremap <leader>O :call Number('
-" vnoremap <leader><C-o> :call NumberCore('
