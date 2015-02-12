@@ -1,24 +1,4 @@
-" Appends an increasing number to a pattern on a range of lines. For example,
-" say you had a list like this:
-
-" Task1 Some stuff about task1
-" Task2 Some stuff about task2
-" Task3 Some stuff about task3
-" Task4 Some stuff about task4
-
-" If you wanted to insert another 'Task' between Task2 and Task3 it would be
-" fairly annoying to re-number all the 'Task's. But with this plugin it would
-" be simple. Just visually select the text to reorder and run the command:
-
-"                :call Number()
-
-" You can get more specific about which patterns you'd like to adjust. Say
-" that the 'task's at the end got out of order. You could visually select the
-" list and run:
-
-"                :call NumberStr('task')
-
-" Author; Lucas Groenendaal
+" Author: Lucas Groenendaal
 
 " The old NumberCore() function was a bit too complicated for my taste so I
 " made this next iteration simpler.  All it does is replaces 'pattern' with an
@@ -69,12 +49,18 @@ endfunction
 " series of lines.
 function! FindRegexEndingInNumber(string_list)
     let regex = '\v^[^0-9]*\d+\S*'
-    " Those 4 backslashes in a row look pretty bad but they're necessary.
+    " Replaces any numbers with the string '\d\+\ze'. Those 4 backslashes in a
+    " row look pretty bad but they're necessary.
     call map(a:string_list, 'substitute(escape(matchstr(v:val, regex), "\\"), "\\d\\+", "\\\\zs\\\\d\\\\+\\\\ze", "")')
+    " Use the \s\* pattern only when the most common pattern doesn't start at
+    " the beginning of the line.
+    let return_val = GetMostCommonNonEmptyStr(a:string_list)
+    if matchstr(return_val, '^\S') ==# ''
+        let return_val = '\s\*' . substitute(return_val, '^\s*', '', '')
+    endif
     " I turn on the 'very nomagic' switch so all characters returned from
     " GetMostCommonNonEmptyStr() will be treated literally.
-    " TODO: Don't use the \s\* when the pattern ACTUALLY matched at the beginning of the line.
-    return '\V\^\s\*' . substitute(GetMostCommonNonEmptyStr(a:string_list), '^\s*', '', '')
+    return '\V\^' . return_val
 endfunction
 
 " Changes the buffer.
@@ -84,7 +70,6 @@ function! ChangeLines(startline, endline, pattern)
         call setline(i, new_lines[i-a:startline])
     endfor
 endfunction
-
 
 " These three functions are the things which should be mapped.
 
