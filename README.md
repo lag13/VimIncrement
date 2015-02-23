@@ -34,7 +34,7 @@ The end result would look like this:
 
 Examples
 --------
-The function Number() was designed for more than just lists beginning with numbers. The rough algorithm is this: In a selected region of text, Number() will find the most common pattern ending in 1 or more digits and replace the digits in those patterns with an increasing sequence of numbers. It is a bit more robust than just that though. Here are a few examples of what it can do:
+The function Number() was designed for more than just lists beginning with numbers. The rough algorithm is this: In a selected region of text, Number() will find the most common pattern ending in 1 or more digits and replace the digits in those patterns with an increasing sequence of numbers. Here are a few examples of what it can do:
 
 ###Highlight Empty Lines and Call Number()
 If you select a series of empty lines and call Number() then those empty lines will contain an increasing sequence of numbers.
